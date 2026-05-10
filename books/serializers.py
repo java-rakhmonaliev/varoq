@@ -1,30 +1,36 @@
 from rest_framework import serializers
-from .models import Author, Book, BookAuthor
+from .models import Book, Author, BookAuthor
 
 
 class AuthorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Author
-        fields = ['id', 'name', 'created_at']
-        read_only_fields = ['id', 'created_at']
-
-
-class BookAuthorSerializer(serializers.ModelSerializer):
-    author = AuthorSerializer(read_only=True)
-
-    class Meta:
-        model = BookAuthor
-        fields = ['id', 'author']
+        fields = ["id", "name"]
 
 
 class BookSerializer(serializers.ModelSerializer):
-    authors = BookAuthorSerializer(source='book_authors', many=True, read_only=True)
+    authors = serializers.SerializerMethodField()
 
     class Meta:
         model = Book
         fields = [
-            'id', 'isbn', 'title', 'description', 'cover_url',
-            'published_year', 'page_count', 'language', 'publisher',
-            'source', 'is_verified', 'authors', 'created_at'
+            "id",
+            "isbn",
+            "title",
+            "description",
+            "cover_url",
+            "published_year",
+            "page_count",
+            "language",
+            "publisher",
+            "genre",
+            "source",
+            "is_verified",
+            "created_at",
+            "updated_at",
+            "authors",
         ]
-        read_only_fields = ['id', 'created_at', 'is_verified']
+        read_only_fields = ["id", "created_at", "updated_at", "source", "is_verified"]
+
+    def get_authors(self, obj):
+        return [ba.author.name for ba in obj.book_authors.select_related("author").all()]

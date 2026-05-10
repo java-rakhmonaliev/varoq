@@ -1,14 +1,13 @@
 from pathlib import Path
+from decouple import config
+from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "django-insecure-9sqbvm*4c3rocdkmys7*(9b(m9(oo13r+i*m27gfz^bd3*&4#3"
+SECRET_KEY = config('SECRET_KEY')
+DEBUG = config('DEBUG', default=False, cast=bool)
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
 
-DEBUG = True
-
-ALLOWED_HOSTS = []
-
-# ==================== INSTALLED APPS ====================
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -18,8 +17,10 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     # Third party
     "rest_framework",
+    "corsheaders",
+    "drf_spectacular",
     "phonenumber_field",
-    # Our apps
+    # Apps
     "accounts",
     "books",
     "shelf",
@@ -28,20 +29,9 @@ INSTALLED_APPS = [
     "feed",
 ]
 
-# ==================== REST FRAMEWORK ====================
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 20,
-}
-
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",  # must be before CommonMiddleware
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -70,36 +60,50 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-# ==================== DATABASE ====================
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": config("DB_NAME", default="varoq"),
+        "USER": config("DB_USER", default="varoq"),
+        "PASSWORD": config("DB_PASSWORD", default="varoq"),
+        "HOST": config("DB_HOST", default="localhost"),
+        "PORT": config("DB_PORT", default="5432"),
     }
 }
 
-# ==================== PASSWORD VALIDATION ====================
 AUTH_PASSWORD_VALIDATORS = []
 
-# ==================== INTERNATIONALIZATION ====================
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "Asia/Tashkent"
 USE_I18N = True
 USE_TZ = True
 
-# ==================== STATIC FILES ====================
 STATIC_URL = "static/"
-
-# ==================== CUSTOM USER MODEL ====================
 AUTH_USER_MODEL = "accounts.User"
-
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-
-from datetime import timedelta
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=7),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
     'ROTATE_REFRESH_TOKENS': True,
+}
+
+CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='').split(',')
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Varoq API',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
 }

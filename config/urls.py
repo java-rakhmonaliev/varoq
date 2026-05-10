@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.urls import path, include
 from django.http import JsonResponse
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+
 
 
 def health_check(request):
@@ -24,4 +26,8 @@ urlpatterns = [
     path('api/reviews/', include('reviews.urls')),
     path('api/social/', include('social.urls')),
     path('api/feed/', include('feed.urls')),
+
+
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
 ]

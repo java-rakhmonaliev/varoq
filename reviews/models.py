@@ -1,17 +1,18 @@
-from django.conf import settings
 from django.db import models
+from django.conf import settings
+from django.core.validators import MinValueValidator, MaxValueValidator
+
+from shelf.models import UserBook
 
 
 class Review(models.Model):
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="reviews"
+    user_book = models.ForeignKey(
+        UserBook,
+        on_delete=models.CASCADE,
+        related_name='reviews'
     )
-    book = models.ForeignKey(
-        "books.Book", on_delete=models.CASCADE, related_name="reviews"
-    )
-
     rating = models.PositiveSmallIntegerField(
-        choices=[(i, str(i)) for i in range(1, 6)]
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
     )
     body = models.TextField(blank=True)
     is_public = models.BooleanField(default=True)
@@ -21,11 +22,19 @@ class Review(models.Model):
 
     class Meta:
         db_table = "reviews"
-        unique_together = ("user", "book")  # one review per user per book
+        verbose_name = "Review"
+        verbose_name_plural = "Reviews"
+        # One review per shelf entry (UserBook already guarantees one per user+book)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user_book"],
+                name="unique_review_per_user_book"
+            )
+        ]
         indexes = [
-            models.Index(fields=["book", "is_public"]),
-            models.Index(fields=["user"]),
+            models.Index(fields=["is_public"]),
+            models.Index(fields=["created_at"]),
         ]
 
     def __str__(self):
-        return f"{self.user.phone} — {self.book.title} ({self.rating}★)"
+        return f"Review by {self.user_book.user} on {self.user_book.book}"

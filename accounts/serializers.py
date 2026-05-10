@@ -7,7 +7,7 @@ from .models import User, OTPCode
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'phone', 'display_name', 'avatar_url', 'bio', 'reading_goal_2026', 'created_at']
+        fields = ['id', 'phone', 'display_name', 'avatar_url', 'bio', 'annual_reading_goal', 'created_at']
         read_only_fields = ['id', 'created_at']
 
 

@@ -1,6 +1,6 @@
+import uuid
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
-from django.utils import timezone
 from phonenumber_field.modelfields import PhoneNumberField
 
 
@@ -17,12 +17,6 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("is_active", True)
-
-        if extra_fields.get("is_staff") is not True:
-            raise ValueError("Superuser must have is_staff=True.")
-        if extra_fields.get("is_superuser") is not True:
-            raise ValueError("Superuser must have is_superuser=True.")
-
         return self.create_user(phone, password, **extra_fields)
 
 
@@ -31,7 +25,7 @@ class User(AbstractUser):
     display_name = models.CharField(max_length=150, blank=True)
     avatar_url = models.URLField(blank=True, null=True)
     bio = models.TextField(blank=True)
-    reading_goal_2026 = models.PositiveSmallIntegerField(default=12)
+    annual_reading_goal = models.PositiveSmallIntegerField(default=12)
 
     username = None
     USERNAME_FIELD = "phone"
@@ -52,6 +46,8 @@ class User(AbstractUser):
 class OTPCode(models.Model):
     phone = PhoneNumberField(region="UZ")
     code = models.CharField(max_length=6)
+    session_token = models.UUIDField(default=uuid.uuid4, unique=True)  # deep link token
+    chat_id = models.BigIntegerField(null=True, blank=True)             # set by bot on /start
     expires_at = models.DateTimeField()
     used_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
