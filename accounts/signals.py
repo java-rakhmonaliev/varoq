@@ -29,9 +29,10 @@ def create_userbook_event(sender, instance, created, **kwargs):
 @receiver(post_save, sender=Review)
 def create_review_event(sender, instance, created, **kwargs):
     if created:
+        # Review has no direct user/book FK — must traverse through user_book
         FeedEvent.objects.create(
-            actor=instance.user,
+            actor=instance.user_book.user,
             event_type='wrote_review',
-            book=instance.book,
+            book=instance.user_book.book,
             review=instance,
         )

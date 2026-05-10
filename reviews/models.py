@@ -6,11 +6,7 @@ from shelf.models import UserBook
 
 
 class Review(models.Model):
-    user_book = models.ForeignKey(
-        UserBook,
-        on_delete=models.CASCADE,
-        related_name='reviews'
-    )
+    user_book = models.ForeignKey(UserBook, on_delete=models.CASCADE, null=True, blank=True)
     rating = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(5)]
     )

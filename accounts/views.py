@@ -1,4 +1,4 @@
-import random
+import secrets
 from rest_framework import viewsets, status, generics, permissions
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -10,6 +10,7 @@ from .models import User, OTPCode
 from .serializers import UserSerializer, SendOTPSerializer, VerifyOTPSerializer
 
 BOT_USERNAME = config("TELEGRAM_BOT_USERNAME", default="VaroqBot")
+OTP_RATE_LIMIT_SECONDS = 60  # one OTP request per phone per minute
 
 
 class AuthViewSet(viewsets.ViewSet):
@@ -22,9 +23,23 @@ class AuthViewSet(viewsets.ViewSet):
             return Response(serializer.errors, status=400)
 
         phone = serializer.validated_data['phone']
+
+        # Rate limit: block if an unused OTP was issued in the last 60 seconds
+        cooldown_start = timezone.now() - timedelta(seconds=OTP_RATE_LIMIT_SECONDS)
+        if OTPCode.objects.filter(
+            phone=phone,
+            used_at__isnull=True,
+            created_at__gte=cooldown_start,
+        ).exists():
+            return Response(
+                {"error": "Please wait before requesting a new code."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
         User.objects.get_or_create(phone=phone, defaults={'display_name': 'New Reader'})
 
-        code = f"{random.randint(100000, 999999)}"
+        # secrets.randbelow is cryptographically secure; random.randint is not
+        code = str(secrets.randbelow(900000) + 100000)
         otp = OTPCode.objects.create(
             phone=phone,
             code=code,
