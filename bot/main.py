@@ -51,50 +51,54 @@ async def login_handler(message: types.Message):
         reply_markup=CONTACT_KEYBOARD,
     )
 
-# ── Contact handler ─────────────────────────────────────────────────────────
+# ── Contact handler (with full error logging) ───────────────────────────────
 @dp.message(F.contact)
 async def contact_handler(message: types.Message):
-    contact = message.contact
-    if contact.user_id != message.from_user.id:
-        await message.answer("❌ Please share your own contact.")
-        return
+    try:
+        contact = message.contact
+        if contact.user_id != message.from_user.id:
+            await message.answer("❌ Please share your own contact.")
+            return
 
-    phone = contact.phone_number.lstrip("+")
-    code = str(secrets.randbelow(900000) + 100000)  # 6-digit secure code
+        phone = contact.phone_number.lstrip("+")
+        code = str(secrets.randbelow(900000) + 100000)
 
-    async with pool.acquire() as conn:
-        # Mark old codes as used
-        await conn.execute(
-            "UPDATE otp_codes SET used_at = NOW() WHERE phone = $1 AND used_at IS NULL",
-            phone,
+        async with pool.acquire() as conn:
+            # Invalidate old unused codes for this phone
+            await conn.execute(
+                "UPDATE otp_codes SET used_at = NOW() WHERE phone = $1 AND used_at IS NULL",
+                phone,
+            )
+            # Insert / upsert new OTP
+            await conn.execute(
+                """
+                INSERT INTO otp_codes (phone, code, expires_at, chat_id)
+                VALUES ($1, $2, NOW() + INTERVAL '5 minutes', $3)
+                ON CONFLICT (phone) 
+                DO UPDATE SET 
+                    code = $2,
+                    expires_at = NOW() + INTERVAL '5 minutes',
+                    used_at = NULL,
+                    chat_id = $3
+                """,
+                phone, code, message.chat.id,
+            )
+
+        await message.answer(
+            f"🔐 Sizning Varoq kodingiz:\n\n"
+            f"`{code}`\n\n"
+            f"Kod 5 daqiqa davomida amal qiladi.\n\n"
+            f"🇺🇿 Yangi kod olish uchun /login ni bosing\n"
+            f"🇺🇸 To get a new code click /login",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardRemove(),
         )
-        # Create new OTP
-        await conn.execute(
-            """
-            INSERT INTO otp_codes (phone, code, expires_at, chat_id)
-            VALUES ($1, $2, NOW() + INTERVAL '5 minutes', $3)
-            ON CONFLICT (phone) 
-            DO UPDATE SET 
-                code = $2,
-                expires_at = NOW() + INTERVAL '5 minutes',
-                used_at = NULL,
-                chat_id = $3
-            """,
-            phone, code, message.chat.id,
-        )
 
-    await message.answer(
-        f"🔐 Sizning Varoq kodingiz:\n\n"
-        f"`{code}`\n\n"
-        f"Kod 5 daqiqa davomida amal qiladi.\n\n"
-        f"🇺🇿 Yangi kod olish uchun /login ni bosing\n"
-        f"🇺🇸 To get a new code click /login",
-        parse_mode="Markdown",
-        reply_markup=ReplyKeyboardRemove(),
-    )
+        asyncio.create_task(notify_expiry(message.chat.id, phone, code))
 
-    # Schedule expiry message
-    asyncio.create_task(notify_expiry(message.chat.id, phone, code))
+    except Exception as e:
+        print(f"❌ ERROR in contact_handler: {type(e).__name__}: {e}")
+        await message.answer("❌ Xatolik yuz berdi. Iltimos /login ni bosing va qayta urinib ko'ring.")
 
 # ── Renew button ────────────────────────────────────────────────────────────
 @dp.message(F.text == "🔄 Renew / Yangilash")
@@ -103,26 +107,28 @@ async def renew_handler(message: types.Message):
 
 # ── Expiry notification ─────────────────────────────────────────────────────
 async def notify_expiry(chat_id: int, phone: str, code: str):
-    await asyncio.sleep(300)  # 5 minutes
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT used_at FROM otp_codes WHERE phone = $1 AND code = $2",
-            phone, code
-        )
-    if row and row["used_at"] is None:
+    await asyncio.sleep(300)
+    try:
         async with pool.acquire() as conn:
-            await conn.execute(
-                "UPDATE otp_codes SET used_at = NOW() WHERE phone = $1 AND code = $2",
+            row = await conn.fetchrow(
+                "SELECT used_at FROM otp_codes WHERE phone = $1 AND code = $2",
                 phone, code
             )
-        await bot.send_message(
-            chat_id,
-            "🔒 Kod muddati tugadi. Yangi kod olish uchun /login ni bosing.\n\n"
-            "🔒 Code expired. Request a new code by pressing /login",
-            reply_markup=RENEW_KEYBOARD,
-        )
+            if row and row["used_at"] is None:
+                await conn.execute(
+                    "UPDATE otp_codes SET used_at = NOW() WHERE phone = $1 AND code = $2",
+                    phone, code
+                )
+                await bot.send_message(
+                    chat_id,
+                    "🔒 Kod muddati tugadi. Yangi kod olish uchun /login ni bosing.\n\n"
+                    "🔒 Code expired. Request a new code by pressing /login",
+                    reply_markup=RENEW_KEYBOARD,
+                )
+    except Exception as e:
+        print(f"❌ ERROR in notify_expiry: {e}")
 
-# ── DB init ─────────────────────────────────────────────────────────────────
+# ── DB init (safe if table already exists from Django migration) ────────────
 async def init_db(conn):
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS otp_codes (
