@@ -3,6 +3,7 @@ import os
 import asyncpg
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
+from aiogram.filters.command import CommandObject  # ← correct import
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -10,9 +11,11 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+pool: asyncpg.Pool | None = None
+
 
 @dp.message(CommandStart())
-async def start_handler(message: types.Message, command: CommandStart):
+async def start_handler(message: types.Message, command: CommandObject):  # ← fixed type
     session_token = command.args
 
     if not session_token:
@@ -22,8 +25,7 @@ async def start_handler(message: types.Message, command: CommandStart):
         )
         return
 
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
+    async with pool.acquire() as conn:
         otp = await conn.fetchrow(
             """
             SELECT id, code FROM otp_codes
@@ -43,21 +45,21 @@ async def start_handler(message: types.Message, command: CommandStart):
             message.chat.id, otp['id'],
         )
 
-        await message.answer(
-            f"🔐 Sizning Varoq kodingiz:\n\n"
-            f"`{otp['code']}`\n\n"
-            f"Kod 5 daqiqa davomida amal qiladi.",
-            parse_mode="Markdown",
-        )
-    finally:
-        await conn.close()
+    await message.answer(
+        f"🔐 Sizning Varoq kodingiz:\n\n"
+        f"`{otp['code']}`\n\n"
+        f"Kod 5 daqiqa davomida amal qiladi.",
+        parse_mode="Markdown",
+    )
 
 
 async def main():
+    global pool
+    pool = await asyncpg.create_pool(DATABASE_URL)
     print("Varoq bot is running...")
     await dp.start_polling(bot)
+    await pool.close()
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-
